@@ -3,7 +3,10 @@
 A wake-word voice assistant for one Android phone. Sideloaded, personal use, zero
 recurring cost. Built strictly phase by phase - see the build spec.
 
-**Current state: Phase 0 (skeleton) complete. Happy does not listen yet.**
+**Current state: Phases 0 to 4 complete.** Happy listens for "hey Jarvis",
+transcribes offline, speaks back, and runs offline device commands.
+See [PROGRESS.md](PROGRESS.md) for the full state, the device-specific
+findings, and the Phase 5 plan.
 
 ## What exists
 
