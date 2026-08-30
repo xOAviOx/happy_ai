@@ -1,0 +1,14 @@
+# Normalize to LF in the repository, let Git handle the working copy.
+* text=auto
+
+# The wrapper script is executed by sh; CRLF breaks it on Linux and macOS.
+gradlew text eol=lf
+*.bat text eol=crlf
+
+# Binary payloads: never touch, never diff.
+*.jar binary
+*.tflite binary
+*.apk binary
+*.aab binary
+*.keystore binary
+*.png binary
