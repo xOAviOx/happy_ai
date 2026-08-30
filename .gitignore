@@ -1,0 +1,15 @@
+# Secrets live here and nowhere else. See section 12 of the build spec.
+local.properties
+
+*.iml
+.gradle/
+build/
+.idea/
+.kotlin/
+.cxx/
+captures/
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+.DS_Store
