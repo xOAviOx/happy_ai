@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Happy</string>
+    <string name="log_title">Happy log</string>
+    <string name="channel_service_name">Happy service</string>
+    <string name="channel_service_desc">The persistent notification that keeps Happy alive.</string>
+    <string name="notif_title">Happy is listening</string>
+    <string name="notif_stop">Stop</string>
+</resources>
