@@ -55,6 +55,9 @@ class ContactResolver @Inject constructor(
             .distinctBy { it.number.filter(Char::isDigit).takeLast(NUMBER_TAIL) }
     }
 
+    /** Every contact with a number. Used for reverse lookup from the call log. */
+    fun all(): List<Contact> = if (hasPermission()) load() else emptyList()
+
     private fun load(): List<Contact> {
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY,

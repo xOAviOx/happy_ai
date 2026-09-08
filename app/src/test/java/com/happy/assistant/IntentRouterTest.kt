@@ -118,6 +118,59 @@ class IntentRouterTest {
     }
 
     @Test
+    fun `call phrases that are not names`() {
+        // "call back" must not become a person called "back".
+        assertEquals(Command.CallBack, router.match("call back"))
+        assertEquals(Command.CallBack, router.match("call the last number"))
+        assertEquals(Command.AnswerCall, router.match("pick up"))
+        assertEquals(Command.AnswerCall, router.match("answer the call"))
+        assertEquals(Command.RejectCall, router.match("hang up"))
+        assertEquals(Command.RejectCall, router.match("cut the call"))
+        assertEquals(Command.Speakerphone(true), router.match("speaker on"))
+        assertEquals(Command.Speakerphone(false), router.match("turn off the speakerphone"))
+        assertEquals(Command.WhoCalled, router.match("who called me"))
+    }
+
+    @Test
+    fun `calling a person`() {
+        assertEquals(Command.CallContact("rohit"), router.match("call rohit"))
+        assertEquals(Command.CallContact("mom"), router.match("please call mom"))
+        assertEquals(Command.CallContact("papa"), router.match("papa ko call karo"))
+    }
+
+    @Test
+    fun `texts carry the recipient and the body`() {
+        assertEquals(
+            Command.SendSms("rohit", "i am late"),
+            router.match("text rohit saying i am late")
+        )
+        assertEquals(
+            Command.SendSms("mom", "reaching by eight"),
+            router.match("send a message to mom saying reaching by eight")
+        )
+        assertEquals(
+            Command.SendSms("papa", "ghar aa raha hu"),
+            router.match("papa ko message karo ki ghar aa raha hu")
+        )
+    }
+
+    @Test
+    fun `reply is not the same act as send`() {
+        // Must not be swallowed by the "text X saying Y" rule.
+        assertEquals(
+            Command.ReplyToNotification("rohit", "on my way"),
+            router.match("reply to rohit saying on my way")
+        )
+    }
+
+    @Test
+    fun `reading notifications`() {
+        assertEquals(Command.ReadNotifications, router.match("read my messages"))
+        assertEquals(Command.ReadNotifications, router.match("what did I miss"))
+        assertEquals(Command.ReadNotifications, router.match("check notifications"))
+    }
+
+    @Test
     fun `anything else falls through unmatched`() {
         assertMatches<Command.Unmatched>(
             "why is the sky blue",

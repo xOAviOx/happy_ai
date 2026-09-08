@@ -106,6 +106,21 @@
                 android:value="Always-on wake word listening for a personal, sideloaded voice assistant." />
         </service>
 
+        <!--
+            Bound by the system when the user grants notification access. This is
+            what makes "read my messages" and inline reply work without any
+            accessibility scripting.
+        -->
+        <service
+            android:name=".service.HappyNotificationListener"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"

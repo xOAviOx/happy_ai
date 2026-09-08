@@ -96,6 +96,57 @@ class IntentRouter @Inject constructor() {
         rule("""^(?:set|start)?\s*(?:a )?timer (?:for|of) (.+)$""") { timerFrom(it.groupValues[1]) },
         rule("""^(.+?) (?:ka |ke )?timer (?:laga ?do|lagao|set karo|start karo)$""") { timerFrom(it.groupValues[1]) },
 
+        // ---- calls, fixed phrases first so they cannot be read as names ----
+        rule("""^(?:call|dial|phone) (?:back|the last number)$""") { Command.CallBack },
+        rule("""^(?:redial|call back)$""") { Command.CallBack },
+
+        rule("""^(?:answer|pick up|accept)(?: the)?(?: call| phone)?$""") { Command.AnswerCall },
+        rule("""^(?:phone |call )?(?:uthao|utha lo)$""") { Command.AnswerCall },
+        rule("""^(?:reject|decline|hang up|hangup|cut|end|disconnect)(?: the)?(?: call| phone)?$""") {
+            Command.RejectCall
+        },
+        rule("""^(?:call )?(?:kaat do|kat do|cut karo|kaato)$""") { Command.RejectCall },
+
+        rule("""^(?:turn |switch |put )?(?:the )?speaker ?(?:phone)? (on|off)$""") {
+            Command.Speakerphone(it.groupValues[1] == "on")
+        },
+        rule("""^(?:turn |switch )(on|off) (?:the )?speaker ?(?:phone)?$""") {
+            Command.Speakerphone(it.groupValues[1] == "on")
+        },
+
+        rule("""^who called(?: me)?(?: today)?$""") { Command.WhoCalled },
+        rule("""^kiska (?:call|phone) (?:aaya|aya)(?: tha)?$""") { Command.WhoCalled },
+
+        // Reply before the send rules: "reply to X saying Y" is a different act
+        // from "text X saying Y" and must not be swallowed by it.
+        rule("""^(?:reply|respond)(?: to)? (.+?) (?:saying|with|that says|ki) (.+)$""") {
+            val who = it.groupValues[1].trim()
+            val body = it.groupValues[2].trim()
+            if (who.isEmpty() || body.isEmpty()) null else Command.ReplyToNotification(who, body)
+        },
+
+        // ---- messages, Hinglish first for the same reason as contacts ----
+        rule("""^(.+?) ko (?:message|text|sms) (?:karo |bhejo |kar do )?(?:ki )?(.+)$""") {
+            sms(it.groupValues[1], it.groupValues[2])
+        },
+        rule("""^(?:send (?:a |an )?(?:text|message|sms) to|text|message|sms) (.+?) (?:saying|that says|about|ki) (.+)$""") {
+            sms(it.groupValues[1], it.groupValues[2])
+        },
+
+        rule("""^(?:read|check)? ?(?:out )?(?:my |the )?(?:messages|notifications|texts)$""") {
+            Command.ReadNotifications
+        },
+        rule("""^what did i miss$""") { Command.ReadNotifications },
+
+        // "call X" is broad, so it sits after every fixed call phrase above.
+        rule("""^(.+?) ko (?:call|phone) (?:karo|kar do|lagao|milao)$""") {
+            Command.CallContact(it.groupValues[1].trim())
+        },
+        rule("""^(?:call|dial|phone|ring) (?:up )?(.+)$""") {
+            it.groupValues[1].trim().takeIf { n -> n.isNotEmpty() }
+                ?.let { n -> Command.CallContact(n) }
+        },
+
         // ---- contacts ----
         // Hinglish first: the English pattern is broad enough to swallow
         // "rohit ka number" and read the name as "rohit ka".
@@ -140,6 +191,12 @@ class IntentRouter @Inject constructor() {
             .trim()
         // Applied repeatedly: "can you please tell me" is three layers deep.
         return POLITENESS.replace(stripped, "").trim()
+    }
+
+    private fun sms(name: String, message: String): Command? {
+        val who = name.trim()
+        val body = message.trim()
+        return if (who.isEmpty() || body.isEmpty()) null else Command.SendSms(who, body)
     }
 
     private fun alarmFrom(raw: String): Command? {

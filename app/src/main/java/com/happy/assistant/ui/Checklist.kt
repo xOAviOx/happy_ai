@@ -174,7 +174,6 @@ fun happyChecklist(): List<CheckItem> = buildList {
             detail = "Reading notifications aloud and replying to them inline.",
             phase = 5,
             kind = CheckKind.NotificationAccess,
-            implemented = false,
         )
     )
     add(

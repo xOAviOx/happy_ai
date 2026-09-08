@@ -39,6 +39,29 @@ sealed interface Command {
 
     data class ContactNumber(val name: String) : Command
 
+    // ---- Phase 5: calls and messaging ----
+
+    data class CallContact(val name: String) : Command
+
+    /** Redial whoever was on the phone last. */
+    data object CallBack : Command
+
+    data object AnswerCall : Command
+
+    data object RejectCall : Command
+
+    data class Speakerphone(val on: Boolean) : Command
+
+    data class SendSms(val name: String, val message: String) : Command
+
+    /** Read out what arrived while the phone was face down. */
+    data object ReadNotifications : Command
+
+    data object WhoCalled : Command
+
+    /** Inline reply to whoever most recently messaged, via RemoteInput. */
+    data class ReplyToNotification(val name: String, val message: String) : Command
+
     /** Nothing matched. Phase 7 hands these to the knowledge router. */
     data class Unmatched(val text: String) : Command
 }

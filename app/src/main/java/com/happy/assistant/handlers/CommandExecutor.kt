@@ -21,6 +21,9 @@ class CommandExecutor @Inject constructor(
     private val alarms: AlarmHandler,
     private val clock: ClockHandler,
     private val contacts: ContactResolver,
+    private val calls: CallHandler,
+    private val messages: MessageHandler,
+    private val notifications: NotificationHandler,
     private val log: HappyLog,
 ) {
 
@@ -39,7 +42,17 @@ class CommandExecutor @Inject constructor(
                 is Command.SetAlarm -> Reply(alarms.setAlarm(command))
                 is Command.SetTimer -> Reply(alarms.setTimer(command))
                 is Command.OpenApp -> Reply(apps.open(command.query))
-                is Command.ContactNumber -> contactNumber(command.name)
+                is Command.ContactNumber -> withContact(command.name, ContactAction.ReadNumber)
+                is Command.CallContact -> withContact(command.name, ContactAction.Call)
+                Command.CallBack -> calls.callBack()
+                Command.AnswerCall -> Reply(calls.answer())
+                Command.RejectCall -> Reply(calls.reject())
+                is Command.Speakerphone -> Reply(calls.speakerphone(command.on))
+                Command.WhoCalled -> Reply(calls.whoCalled())
+                is Command.SendSms -> withContact(command.name, ContactAction.Sms(command.message))
+                Command.ReadNotifications -> Reply(notifications.readRecent())
+                is Command.ReplyToNotification ->
+                    Reply(notifications.reply(command.name, command.message))
                 is Command.Unmatched -> null
             }
         } catch (t: Throwable) {
@@ -49,27 +62,48 @@ class CommandExecutor @Inject constructor(
         }
     }
 
-    private fun contactNumber(name: String): Reply {
+    /**
+     * Resolves a spoken name, then does the thing.
+     *
+     * One path for reading a number, calling and texting, so ambiguity is handled
+     * identically for all three. Nothing irreversible happens while more than one
+     * person still matches.
+     */
+    private fun withContact(name: String, action: ContactAction): Reply {
         if (!contacts.hasPermission()) return Reply("I need permission to read your contacts.")
         val matches = contacts.resolve(name)
         return when {
             matches.isEmpty() -> Reply("I could not find $name in your contacts.")
-            matches.size == 1 -> Reply(numberFor(matches[0]))
+            matches.size == 1 -> perform(matches[0], action)
             else -> {
-                // Spec section 6: ask rather than guess which person was meant, and
-                // keep the options so the answer has somewhere to land.
                 val options = matches.take(MAX_CHOICES)
                 Reply(
                     "Do you mean " + describe(options).joinToString(" or ") + "?",
-                    Pending.ChooseContact(options),
+                    Pending.ChooseContact(options, action),
                 )
             }
         }
     }
 
+    private fun perform(contact: ContactResolver.Contact, action: ContactAction): Reply =
+        when (action) {
+            ContactAction.ReadNumber -> Reply(numberFor(contact))
+            ContactAction.Call -> Reply(calls.dial(contact))
+            // Composes and asks. Sending happens only after a spoken yes.
+            is ContactAction.Sms -> messages.compose(contact, action.message)
+        }
+
     /** Resolves an answer to a question Happy asked a moment ago. */
     fun resolve(pending: Pending, answer: String): Reply = when (pending) {
         is Pending.ChooseContact -> chooseContact(pending, answer)
+        is Pending.ConfirmSms ->
+            if (messages.isYes(answer)) {
+                Reply(messages.send(pending.to, pending.message))
+            } else {
+                // Anything that is not clearly yes is treated as no. Sending a
+                // text on an ambiguous answer is not a recoverable mistake.
+                Reply("Not sent.")
+            }
     }
 
     private fun chooseContact(pending: Pending.ChooseContact, answer: String): Reply {
@@ -78,14 +112,14 @@ class CommandExecutor @Inject constructor(
 
         // "the first one" is a perfectly natural answer to a spoken list.
         val ordinal = ORDINALS.indexOfFirst { lower.contains(it) }
-        if (ordinal in options.indices) return Reply(numberFor(options[ordinal]))
+        if (ordinal in options.indices) return perform(options[ordinal], pending.then)
 
         // Where two people share a name, the answer has to be the digits.
         val digits = lower.filter(Char::isDigit)
         if (digits.length >= TAIL) {
             options.firstOrNull {
                 it.number.filter(Char::isDigit).endsWith(digits.takeLast(TAIL))
-            }?.let { return Reply(numberFor(it)) }
+            }?.let { return perform(it, pending.then) }
         }
 
         val best = options.mapNotNull { option ->
@@ -95,7 +129,7 @@ class CommandExecutor @Inject constructor(
         return if (best == null) {
             Reply("I still could not tell which one you meant.")
         } else {
-            Reply(numberFor(best.second))
+            perform(best.second, pending.then)
         }
     }
 

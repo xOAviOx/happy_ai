@@ -16,10 +16,10 @@ assumed. Last session ended after Phase 4.
 | 2 — STT, mic handover | Done, on-device recogniser, zero mic leaks |
 | 3 — TTS, sanitiser, barge-in | Done, 18 sanitiser tests passing |
 | 4 — Router and offline handlers | Done, all commands verified by voice |
-| 5 — Calls and messaging | **Not started.** Draft router rules below |
+| 5 — Calls and messaging | **Written, compiles, 40 tests pass — NOT verified on device** |
 | 6–9 | Not started |
 
-**Build is green:** `./gradlew :app:testDebugUnitTest :app:assembleDebug` — 35 tests pass.
+**Build is green:** `./gradlew :app:testDebugUnitTest :app:assembleDebug` — 40 tests pass.
 
 There is no git repository. Consider `git init` before the next change;
 `.gitignore` is already written and `local.properties` is listed in it.
@@ -133,7 +133,55 @@ Found on the phone:
 
 ---
 
-## Next: Phase 5 — calls and messaging
+## Phase 5 — built, awaiting device testing
+
+Everything below compiles and the routing is unit tested, but **none of it has
+run on the phone**. Unit tests cover string handling only; every Android API call
+here is unverified.
+
+New files: `handlers/CallHandler.kt`, `handlers/MessageHandler.kt`,
+`handlers/NotificationHandler.kt`, `service/HappyNotificationListener.kt`.
+
+What it does:
+
+- **Call by name**, call back from the log, answer and reject via
+  `TelecomManager`, speakerphone via `setCommunicationDevice`, "who called me"
+  from the call log with reverse contact lookup.
+- **Send a text**, with a spoken confirmation first — Happy reads the message
+  back and only sends on a clear yes. Anything not clearly yes is treated as no.
+- **Read notifications aloud** and **reply inline via RemoteInput**, which works
+  in any app supporting inline reply, with no accessibility scripting.
+- Contact ambiguity is now one path for all three actions: `Pending.ChooseContact`
+  carries a `ContactAction`, so "do you mean Rohit or Mohit" behaves identically
+  whether reading a number, calling, or texting. Nothing irreversible happens
+  while more than one person still matches.
+
+### Before testing, on the phone
+
+1. Open Happy and grant **Notification access** — the checklist row is live now
+   that the listener service exists.
+2. The listener needs the toggle flipped *after* this install; it will not be
+   bound otherwise.
+
+### What to test, riskiest first
+
+- **Sending a text.** The only irreversible action here. Confirm the read-back
+  names the right person before saying yes.
+- **Answer and reject** need a live incoming call, so they cannot be tested any
+  other way.
+- **Inline reply** needs a message from an app that offers inline reply
+  (WhatsApp, Messages). `canReplyTo` filters to notifications that actually
+  carry a RemoteInput action.
+- Call by name, call back, who called, speaker on and off.
+
+### Known limits
+
+- The follow-up loop allows **two rounds**, which is exactly what an ambiguous
+  text needs (pick the person, then confirm the message). A flow needing three
+  would be cut off.
+- `MessageHandler.isYes` treats anything unrecognised as no. Deliberate.
+
+## Phase 6 next — accessibility
 
 Design decisions already made:
 
@@ -159,12 +207,12 @@ Commands to add to `Command.kt`: `CallContact`, `CallBack`, `AnswerCall`,
 `RejectCall`, `Speakerphone`, `SendSms`, `ReadNotifications`, `WhoCalled`.
 The `when` in `CommandExecutor` is exhaustive, so it will name what is missing.
 
-### Draft router rules
+### Router rules as built
 
-Written and compiling last session, then rolled back to keep the build green
-while the handlers do not exist. Insert before the `// ---- contacts ----`
-section of `IntentRouter`. Ordering matters: fixed call phrases must come before
-the broad `call X`, or "call back" is parsed as a person named "back".
+Now in `IntentRouter`, before the contacts section. Ordering matters and is
+tested: fixed call phrases come before the broad `call X`, or "call back" parses
+as a person named "back"; and "reply to X saying Y" comes before "text X saying
+Y" so the two acts stay distinct.
 
 ```kotlin
 // ---- calls, in-call controls first so they cannot be read as names ----
