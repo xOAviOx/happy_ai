@@ -171,6 +171,47 @@ class IntentRouterTest {
     }
 
     @Test
+    fun `screen controls are not app names`() {
+        assertEquals(Command.GlobalAction(Command.Screen.BACK), router.match("go back"))
+        assertEquals(Command.GlobalAction(Command.Screen.HOME), router.match("go home"))
+        assertEquals(Command.GlobalAction(Command.Screen.RECENTS), router.match("show recents"))
+        assertEquals(Command.GlobalAction(Command.Screen.LOCK), router.match("lock the phone"))
+        assertEquals(
+            Command.GlobalAction(Command.Screen.SCREENSHOT),
+            router.match("take a screenshot")
+        )
+    }
+
+    @Test
+    fun `back is a screen action and call back is not`() {
+        assertEquals(Command.GlobalAction(Command.Screen.BACK), router.match("back"))
+        assertEquals(Command.CallBack, router.match("call back"))
+    }
+
+    @Test
+    fun `reading the screen`() {
+        assertEquals(Command.ReadScreen, router.match("what's on my screen"))
+        assertEquals(Command.ReadScreen, router.match("read the screen"))
+    }
+
+    @Test
+    fun `whatsapp is not sms`() {
+        assertEquals(
+            Command.WhatsApp("rohit", "on my way"),
+            router.match("whatsapp rohit saying on my way")
+        )
+        assertEquals(
+            Command.WhatsApp("papa", "ghar aa raha hu"),
+            router.match("papa ko whatsapp karo ki ghar aa raha hu")
+        )
+        // The SMS rule must not have swallowed it.
+        assertEquals(
+            Command.SendSms("rohit", "on my way"),
+            router.match("text rohit saying on my way")
+        )
+    }
+
+    @Test
     fun `anything else falls through unmatched`() {
         assertMatches<Command.Unmatched>(
             "why is the sky blue",

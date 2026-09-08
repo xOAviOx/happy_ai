@@ -18,6 +18,7 @@ sealed interface ContactAction {
     data object ReadNumber : ContactAction
     data object Call : ContactAction
     data class Sms(val message: String) : ContactAction
+    data class WhatsApp(val message: String) : ContactAction
 }
 
 sealed interface Pending {

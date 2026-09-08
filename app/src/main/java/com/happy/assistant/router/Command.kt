@@ -62,6 +62,17 @@ sealed interface Command {
     /** Inline reply to whoever most recently messaged, via RemoteInput. */
     data class ReplyToNotification(val name: String, val message: String) : Command
 
+    // ---- Phase 6: accessibility ----
+
+    enum class Screen { BACK, HOME, RECENTS, LOCK, SCREENSHOT, NOTIFICATIONS }
+
+    data class GlobalAction(val action: Screen) : Command
+
+    /** Read out what is currently on screen. */
+    data object ReadScreen : Command
+
+    data class WhatsApp(val name: String, val message: String) : Command
+
     /** Nothing matched. Phase 7 hands these to the knowledge router. */
     data class Unmatched(val text: String) : Command
 }

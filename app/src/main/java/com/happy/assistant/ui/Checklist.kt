@@ -183,7 +183,6 @@ fun happyChecklist(): List<CheckItem> = buildList {
             detail = "Screen reading, back and home, and sending a WhatsApp message.",
             phase = 6,
             kind = CheckKind.Accessibility,
-            implemented = false,
         )
     )
     add(

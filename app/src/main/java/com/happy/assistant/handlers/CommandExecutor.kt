@@ -24,10 +24,12 @@ class CommandExecutor @Inject constructor(
     private val calls: CallHandler,
     private val messages: MessageHandler,
     private val notifications: NotificationHandler,
+    private val screen: ScreenHandler,
+    private val whatsApp: WhatsAppHandler,
     private val log: HappyLog,
 ) {
 
-    fun execute(command: Command): Reply? {
+    suspend fun execute(command: Command): Reply? {
         log.d(TAG, "executing $command")
         return try {
             when (command) {
@@ -53,6 +55,9 @@ class CommandExecutor @Inject constructor(
                 Command.ReadNotifications -> Reply(notifications.readRecent())
                 is Command.ReplyToNotification ->
                     Reply(notifications.reply(command.name, command.message))
+                is Command.GlobalAction -> Reply(screen.globalAction(command))
+                Command.ReadScreen -> Reply(screen.readScreen())
+                is Command.WhatsApp -> withContact(command.name, ContactAction.WhatsApp(command.message))
                 is Command.Unmatched -> null
             }
         } catch (t: Throwable) {
@@ -69,7 +74,7 @@ class CommandExecutor @Inject constructor(
      * identically for all three. Nothing irreversible happens while more than one
      * person still matches.
      */
-    private fun withContact(name: String, action: ContactAction): Reply {
+    private suspend fun withContact(name: String, action: ContactAction): Reply {
         if (!contacts.hasPermission()) return Reply("I need permission to read your contacts.")
         val matches = contacts.resolve(name)
         return when {
@@ -85,16 +90,20 @@ class CommandExecutor @Inject constructor(
         }
     }
 
-    private fun perform(contact: ContactResolver.Contact, action: ContactAction): Reply =
+    private suspend fun perform(contact: ContactResolver.Contact, action: ContactAction): Reply =
         when (action) {
             ContactAction.ReadNumber -> Reply(numberFor(contact))
             ContactAction.Call -> Reply(calls.dial(contact))
             // Composes and asks. Sending happens only after a spoken yes.
             is ContactAction.Sms -> messages.compose(contact, action.message)
+            // WhatsApp goes straight out rather than asking: the deep link shows
+            // the message on screen before it sends, so the user already sees it,
+            // and the fallback leaves it unsent for them to check.
+            is ContactAction.WhatsApp -> Reply(whatsApp.send(contact, action.message))
         }
 
     /** Resolves an answer to a question Happy asked a moment ago. */
-    fun resolve(pending: Pending, answer: String): Reply = when (pending) {
+    suspend fun resolve(pending: Pending, answer: String): Reply = when (pending) {
         is Pending.ChooseContact -> chooseContact(pending, answer)
         is Pending.ConfirmSms ->
             if (messages.isYes(answer)) {
@@ -106,7 +115,7 @@ class CommandExecutor @Inject constructor(
             }
     }
 
-    private fun chooseContact(pending: Pending.ChooseContact, answer: String): Reply {
+    private suspend fun chooseContact(pending: Pending.ChooseContact, answer: String): Reply {
         val options = pending.options
         val lower = answer.lowercase()
 

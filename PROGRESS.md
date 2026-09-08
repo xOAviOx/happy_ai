@@ -17,9 +17,10 @@ assumed. Last session ended after Phase 4.
 | 3 — TTS, sanitiser, barge-in | Done, 18 sanitiser tests passing |
 | 4 — Router and offline handlers | Done, all commands verified by voice |
 | 5 — Calls and messaging | **Written, compiles, 40 tests pass — NOT verified on device** |
-| 6–9 | Not started |
+| 6 — Accessibility | **Written, compiles, 44 tests pass — NOT verified on device** |
+| 7–9 | Not started |
 
-**Build is green:** `./gradlew :app:testDebugUnitTest :app:assembleDebug` — 40 tests pass.
+**Build is green:** `./gradlew :app:testDebugUnitTest :app:assembleDebug` — 44 tests pass.
 
 There is no git repository. Consider `git init` before the next change;
 `.gitignore` is already written and `local.properties` is listed in it.
@@ -181,7 +182,44 @@ What it does:
   would be cut off.
 - `MessageHandler.isYes` treats anything unrecognised as no. Deliberate.
 
-## Phase 6 next — accessibility
+## Phase 6 — built, awaiting device testing
+
+Also unverified on hardware. New files: `service/HappyAccessibilityService.kt`,
+`handlers/ScreenHandler.kt`, `handlers/WhatsAppHandler.kt`, plus
+`res/xml/accessibility_service_config.xml`.
+
+- **Global actions**: back, home, recents, lock, screenshot, notification shade.
+- **Read the screen**: walks `rootInActiveWindow` and reads it back, truncated to
+  twelve lines. Phase 7 replaces this with a Gemini summary, at which point the
+  full text goes to the model rather than the speaker.
+- **WhatsApp send** to someone not already in a chat: opens a `wa.me` deep link
+  with the message pre-filled, then presses send through accessibility.
+
+The accessibility service is deliberately passive - it subscribes to no events
+and does nothing in the background. It only acts when asked.
+
+**WhatsApp send is the fragile one, by nature.** WhatsApp has no send API, so the
+second half depends on view ids that change between releases. It fails in the
+least annoying direction: if the send button is not found within about five
+seconds, the chat is left open with the message typed and Happy says to tap send.
+Nothing is lost and nothing is sent by accident. View ids tried are
+`com.whatsapp:id/send` and the business build, then any clickable node described
+as "send".
+
+### Before testing
+
+Grant **Accessibility** in the checklist - the row is live now that the service
+exists. It resets on every reinstall, so it will need granting again after each
+install.
+
+### What to test
+
+- Back, home, recents, lock, screenshot.
+- "What's on my screen" on a text-heavy app.
+- WhatsApp send to a contact, and check what happens when the send button is not
+  found - it should leave the chat open rather than claiming success.
+
+## Phase 7 next — knowledge
 
 Design decisions already made:
 

@@ -107,6 +107,25 @@
         </service>
 
         <!--
+            Bound by the system when the user grants accessibility access. The
+            toggle resets on every reinstall, which the setup checklist says
+            plainly - a half-granted accessibility service is the single most
+            confusing failure mode this app has.
+        -->
+        <service
+            android:name=".service.HappyAccessibilityService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!--
             Bound by the system when the user grants notification access. This is
             what makes "read my messages" and inline reply work without any
             accessibility scripting.

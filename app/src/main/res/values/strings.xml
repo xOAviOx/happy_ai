@@ -6,4 +6,5 @@
     <string name="channel_service_desc">The persistent notification that keeps Happy alive.</string>
     <string name="notif_title">Happy is listening</string>
     <string name="notif_stop">Stop</string>
+    <string name="accessibility_description">Lets Happy press back and home, read what is on screen, and send a WhatsApp message when you ask it to. Happy does not watch the screen in the background.</string>
 </resources>

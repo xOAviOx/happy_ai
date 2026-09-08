@@ -96,6 +96,33 @@ class IntentRouter @Inject constructor() {
         rule("""^(?:set|start)?\s*(?:a )?timer (?:for|of) (.+)$""") { timerFrom(it.groupValues[1]) },
         rule("""^(.+?) (?:ka |ke )?timer (?:laga ?do|lagao|set karo|start karo)$""") { timerFrom(it.groupValues[1]) },
 
+        // ---- screen control, before "open X" so none of these read as app names ----
+        rule("""^(?:go |press )?back$""") { Command.GlobalAction(Command.Screen.BACK) },
+        rule("""^(?:peeche jao|wapas jao)$""") { Command.GlobalAction(Command.Screen.BACK) },
+        rule("""^(?:go |press )?home(?: screen)?$""") { Command.GlobalAction(Command.Screen.HOME) },
+        rule("""^(?:show )?recent(?: apps| screens)?$""") { Command.GlobalAction(Command.Screen.RECENTS) },
+        rule("""^(?:show )?recents$""") { Command.GlobalAction(Command.Screen.RECENTS) },
+        rule("""^lock(?: the)?(?: screen| phone| it)?$""") { Command.GlobalAction(Command.Screen.LOCK) },
+        rule("""^(?:phone |screen )?lock kar ?do$""") { Command.GlobalAction(Command.Screen.LOCK) },
+        rule("""^(?:take (?:a )?)?screenshot(?: lo| le lo)?$""") {
+            Command.GlobalAction(Command.Screen.SCREENSHOT)
+        },
+        rule("""^(?:open |show |pull down )(?:the )?notification(?:s)?(?: shade| panel)?$""") {
+            Command.GlobalAction(Command.Screen.NOTIFICATIONS)
+        },
+
+        rule("""^(?:whats|what is) on (?:my |the )?screen$""") { Command.ReadScreen },
+        rule("""^read (?:the |my )?screen$""") { Command.ReadScreen },
+        rule("""^(?:screen (?:padho|padh do)|screen mein kya hai)$""") { Command.ReadScreen },
+
+        // WhatsApp before the generic text rules, or "whatsapp X saying Y" is an SMS.
+        rule("""^whats ?app (.+?) (?:saying|that says|ki) (.+)$""") {
+            whatsApp(it.groupValues[1], it.groupValues[2])
+        },
+        rule("""^(.+?) ko whats ?app (?:karo |kar do |bhejo )?(?:ki )?(.+)$""") {
+            whatsApp(it.groupValues[1], it.groupValues[2])
+        },
+
         // ---- calls, fixed phrases first so they cannot be read as names ----
         rule("""^(?:call|dial|phone) (?:back|the last number)$""") { Command.CallBack },
         rule("""^(?:redial|call back)$""") { Command.CallBack },
@@ -191,6 +218,12 @@ class IntentRouter @Inject constructor() {
             .trim()
         // Applied repeatedly: "can you please tell me" is three layers deep.
         return POLITENESS.replace(stripped, "").trim()
+    }
+
+    private fun whatsApp(name: String, message: String): Command? {
+        val who = name.trim()
+        val body = message.trim()
+        return if (who.isEmpty() || body.isEmpty()) null else Command.WhatsApp(who, body)
     }
 
     private fun sms(name: String, message: String): Command? {
