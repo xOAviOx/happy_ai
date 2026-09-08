@@ -223,12 +223,45 @@ private fun sms(name: String, message: String): Command? {
 
 ---
 
+## Phase 7 groundwork, measured against the live API
+
+The Gemini key is in `local.properties` and verified working: it authenticates as
+an API key on `?key=`, is rejected as a bearer token, and `gemini-2.5-flash` is
+available with a 1M input limit.
+
+**Streaming only works with thinking disabled.** Three runs each, same prompt,
+asking for six sentences:
+
+| Config | Time to first byte | Chunks |
+|---|---|---|
+| default, thinking on | 4.33 / 3.14 / 3.58 s | **1** |
+| `thinkingConfig.thinkingBudget = 0` | 2.80 / 6.59 / 1.23 s | **4** |
+
+With thinking on the whole answer arrives as a single chunk, so sentence-by-
+sentence TTS - the spec's biggest perceived-latency win - would be dead code.
+**Set `thinkingBudget: 0` for normal answers.** Keep thinking available for an
+explicit "explain more", where the wait is expected.
+
+Note `streamGenerateContent` is absent from the model's advertised
+`supportedGenerationMethods`, yet works. Do not trust that field.
+
+**The latency target is not currently reachable.** The spec budgets 600–1500 ms
+to first token and 2.5 s to the first spoken word; measured range was 1.2–6.6 s
+with wide variance, on a desktop connection rather than the phone's. Design for
+it: Wikipedia-first routing avoids Gemini entirely for entity lookups, and
+something should fill the silence - a short earcon, or a spoken "let me think" -
+rather than leaving several seconds of nothing.
+
 ## Open items, not blocking
 
 - **Wake-word false-positive soak never run.** The spec wants a full day of
   ordinary speech before Phase 1 is signed off. Every detection is logged with a
   score, so the data can be gathered whenever.
 - **Battery drain unmeasured** with the mic always on. Spec budgets 3–8% per 24h.
+- **Spotify client secret deliberately not stored.** PKCE needs no secret, and
+  one compiled into a sideloaded APK is extractable. The secret was shared in
+  chat once and should be rotated; the client ID is public by design and is in
+  `local.properties`.
 - **Vosk fallback deliberately skipped** — the on-device recogniser works
   (`onDevice=true`). Revisit only if it ever fails.
 - **`WRITE_SETTINGS` ungranted** — only needed for brightness.
