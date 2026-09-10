@@ -23,7 +23,7 @@ import javax.inject.Singleton
  * Android will not let AudioRecord and SpeechRecognizer hold the mic at the same
  * time, so ownership here is explicit and single-threaded: [start] hands back a
  * session, and the caller must [Session.release] it on every exit path including
- * exceptions. Nothing else in Happy may open an AudioRecord.
+ * exceptions. Nothing else in Happy may open an AudioRecord.//
  */
 @Singleton
 class AudioCapture @Inject constructor(
