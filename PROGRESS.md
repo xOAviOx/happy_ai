@@ -18,9 +18,10 @@ assumed. Last session ended after Phase 4.
 | 4 — Router and offline handlers | Done, all commands verified by voice |
 | 5 — Calls and messaging | **Written, compiles, 40 tests pass — NOT verified on device** |
 | 6 — Accessibility | **Written, compiles, 44 tests pass — NOT verified on device** |
-| 7–9 | Not started |
+| 7 — Knowledge | **Written, compiles, 60 tests pass — NOT verified on device** |
+| 8–9 | Not started |
 
-**Build is green:** `./gradlew :app:testDebugUnitTest :app:assembleDebug` — 44 tests pass.
+**Build is green:** `./gradlew :app:testDebugUnitTest :app:assembleDebug` — 60 tests pass.
 
 There is no git repository. Consider `git init` before the next change;
 `.gitignore` is already written and `local.properties` is listed in it.
@@ -219,7 +220,48 @@ install.
 - WhatsApp send to a contact, and check what happens when the send button is not
   found - it should leave the chat open rather than claiming success.
 
-## Phase 7 next — knowledge
+## Phase 7 — built, awaiting device testing
+
+New files under `knowledge/`: `KnowledgeRouter`, `MathEvaluator`,
+`WikipediaClient`, `WeatherClient`, `GeminiClient`, `SentenceChunker`.
+
+Dispatch order, deterministic first, exactly as section 7 requires:
+
+1. **Maths and unit conversion** on device. Arithmetic with real precedence,
+   percentages, length, mass, volume, and temperature. Temperature is handled
+   apart from the rest because it is an offset scale, not a ratio.
+2. **Weather** from Open-Meteo, no key. Uses the last known location, or a named
+   city via Open-Meteo geocoding, which needs no permission at all.
+3. **Wikipedia** for named entities, trimmed to two sentences. A disambiguation
+   page or a 404 falls through rather than apologising.
+4. **Gemini** only for what is left. Time, date, battery and storage never reach
+   here at all - the intent router matches those as commands first.
+
+Streaming speaks sentence by sentence through `SentenceChunker`, which holds back
+decimals, initials like "J. R. R." and abbreviations so the speech does not
+stutter mid-sentence. `Speaker.enqueue` queues without blocking, so collecting
+the next chunk is not stalled by the sentence currently being read.
+
+Rate limiting backs off 1, 2, 4, 8 seconds then says it has hit the daily limit,
+without quoting a number - Google revises free-tier quotas without notice.
+Offline says "I need a connection for that."
+
+**Follow-up mode** is live: five seconds after any answer, "explain more" or
+"tell me more" re-asks with thinking enabled and a larger token budget. Anything
+else said in that window is treated as a fresh command rather than ignored. The
+window is offered only after questions, never after commands.
+
+### What to test
+
+- Maths and conversions out loud, and check the answers.
+- "What's the weather" and "weather in Delhi tomorrow".
+- "Who is Ada Lovelace" should come from Wikipedia, fast.
+- "Why is the sky blue" should stream from Gemini, and should start speaking
+  before the whole answer has arrived - that is the thing to listen for.
+- "Explain more" within five seconds of an answer.
+- Airplane mode: device commands must still work, questions must fail gracefully.
+
+## Phase 8 next — Spotify
 
 Design decisions already made:
 

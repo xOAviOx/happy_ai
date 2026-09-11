@@ -7,6 +7,7 @@ import com.happy.assistant.core.HappyLog
 import com.happy.assistant.data.Prefs
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
@@ -118,6 +119,36 @@ class Speaker @Inject constructor(
         isSpeaking = false
     }
 
+    /**
+     * Queues a sentence and returns immediately.
+     *
+     * Streaming needs this: [say] suspends until the engine finishes, which would
+     * stall collection of the next chunk while the current sentence is still being
+     * read. Queue as they arrive, then [awaitIdle] once the stream ends.
+     */
+    fun enqueue(text: String, flush: Boolean = false) {
+        val engine = tts ?: return
+        val clean = TtsSanitizer.clean(text)
+        if (clean.isEmpty()) return
+
+        val id = "happy-${ids.incrementAndGet()}"
+        pending[id] = CompletableDeferred()
+        isSpeaking = true
+        val mode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+        if (engine.speak(clean, mode, null, id) != TextToSpeech.SUCCESS) {
+            log.e(TAG, "speak() refused a queued sentence")
+            pending.remove(id)
+        }
+    }
+
+    /** Waits for everything queued to finish, or for barge-in to clear it. */
+    suspend fun awaitIdle(timeoutMs: Long = SPEAK_TIMEOUT_MS) {
+        withTimeoutOrNull(timeoutMs) {
+            while (pending.isNotEmpty()) delay(IDLE_POLL_MS)
+        }
+        isSpeaking = false
+    }
+
     /** Barge-in, and the stop button. Silences the engine immediately. */
     fun stop() {
         try {
@@ -167,5 +198,6 @@ class Speaker @Inject constructor(
         private const val TAG = "Tts"
         private const val INIT_TIMEOUT_MS = 5_000L
         private const val SPEAK_TIMEOUT_MS = 30_000L
+        private const val IDLE_POLL_MS = 50L
     }
 }

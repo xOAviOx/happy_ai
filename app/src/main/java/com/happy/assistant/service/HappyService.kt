@@ -19,6 +19,9 @@ import com.happy.assistant.audio.WakeWordDetector
 import com.happy.assistant.core.HappyLog
 import com.happy.assistant.handlers.CommandExecutor
 import com.happy.assistant.handlers.Reply
+import com.happy.assistant.knowledge.GeminiClient
+import com.happy.assistant.knowledge.KnowledgeRouter
+import com.happy.assistant.knowledge.SentenceChunker
 import com.happy.assistant.router.IntentRouter
 import com.happy.assistant.data.Prefs
 import com.happy.assistant.ui.SetupActivity
@@ -33,6 +36,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,6 +68,7 @@ class HappyService : Service() {
     @Inject lateinit var speaker: Speaker
     @Inject lateinit var router: IntentRouter
     @Inject lateinit var executor: CommandExecutor
+    @Inject lateinit var knowledge: KnowledgeRouter
 
     private val errorHandler = CoroutineExceptionHandler { _, t ->
         log.e(TAG, "unhandled coroutine failure", t)
@@ -370,8 +375,15 @@ class HappyService : Service() {
         val command = router.match(transcript)
         log.i(TAG, "matched $command")
 
-        // Phase 7 replaces the fallback with Wikipedia, weather, maths and Gemini.
-        var reply = executor.execute(command) ?: Reply("I cannot answer that yet.")
+        val handled = executor.execute(command)
+        if (handled == null) {
+            // No command matched, so it is a question. Deterministic sources
+            // first, then Wikipedia, then the model.
+            answerQuestion(transcript)
+            offerFollowUp(transcript)
+            return
+        }
+        var reply: Reply = handled
 
         var rounds = 0
         while (true) {
@@ -383,6 +395,88 @@ class HappyService : Service() {
             }
             val answer = captureFollowUp() ?: return
             reply = executor.resolve(pending, answer)
+        }
+    }
+
+    /**
+     * Answers a question that no command matched.
+     *
+     * The knowledge router decides the source; this only deals with getting the
+     * result out of the speaker. A deterministic answer is spoken whole; a model
+     * answer is spoken sentence by sentence as it streams in, which is what makes
+     * a slow first token bearable.
+     */
+    private suspend fun answerQuestion(question: String, elaborate: Boolean = false) {
+        setState(HappyState.PROCESSING)
+        when (val answer = knowledge.answer(question, elaborate)) {
+            is KnowledgeRouter.Answer.Spoken -> speak(answer.text)
+            is KnowledgeRouter.Answer.Streaming -> speakStreaming(answer.events)
+        }
+    }
+
+    private suspend fun speakStreaming(events: Flow<GeminiClient.Event>) {
+        setState(HappyState.SPEAKING)
+        val monitor = scope.launch(Dispatchers.IO) { bargeInMonitor() }
+        val chunker = SentenceChunker()
+        var spoke = false
+        val started = System.currentTimeMillis()
+
+        try {
+            events.collect { event ->
+                when (event) {
+                    is GeminiClient.Event.Chunk ->
+                        chunker.accept(event.text).forEach { sentence ->
+                            if (!spoke) {
+                                log.d(TAG, "first sentence spoken", System.currentTimeMillis() - started)
+                            }
+                            // Queue rather than wait, or collection stalls while
+                            // the current sentence is still being read out.
+                            speaker.enqueue(sentence, flush = !spoke)
+                            spoke = true
+                        }
+
+                    is GeminiClient.Event.Failed -> {
+                        speaker.enqueue(event.spoken, flush = !spoke)
+                        spoke = true
+                    }
+                }
+            }
+            chunker.flush()?.let {
+                speaker.enqueue(it, flush = !spoke)
+                spoke = true
+            }
+            if (!spoke) speaker.enqueue("I did not get an answer.")
+            speaker.awaitIdle()
+        } catch (t: Throwable) {
+            log.e(TAG, "streaming answer failed", t)
+            speaker.say("Something went wrong answering that.")
+        } finally {
+            monitor.cancelAndJoin()
+        }
+    }
+
+    /**
+     * Spec section 8: stay listening briefly after an answer so "explain more"
+     * does not need the wake phrase again.
+     *
+     * Only offered after a question, not after a command - nobody wants Happy
+     * listening on after "torch on".
+     */
+    private suspend fun offerFollowUp(question: String) {
+        setState(HappyState.CAPTURING)
+        earcon.play(Earcon.Tone.FOLLOW_UP)
+        val heard = when (val result = stt.listen(FOLLOW_UP_WINDOW_MS)) {
+            is SpeechToText.Result.Heard -> result.text
+            else -> return
+        }
+        if (ELABORATE.containsMatchIn(heard.lowercase())) {
+            log.i(TAG, "elaborating on the previous question")
+            answerQuestion(question, elaborate = true)
+        } else {
+            // Anything else in the window is a fresh instruction, so treat it as
+            // one rather than making the user say the wake phrase again.
+            log.i(TAG, "follow-up treated as a new command: $heard")
+            handle(heard)
         }
     }
 
@@ -631,6 +725,10 @@ class HappyService : Service() {
 
         /** How many times Happy may ask a follow-up before giving up. */
         private const val MAX_FOLLOW_UPS = 2
+
+        /** Spec section 8: five seconds to say "explain more" without the wake phrase. */
+        private const val FOLLOW_UP_WINDOW_MS = 5_000L
+        private val ELABORATE = Regex("(explain more|tell me more|go on|more detail|elaborate)")
 
         const val ACTION_RESTART_LISTENING = "com.happy.assistant.action.RESTART_LISTENING"
 
